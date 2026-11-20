@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import * as store from './booksStore.js';
-import { validateQuery } from './validate.js';
+import { parseId, validateQuery } from './validate.js';
 
 const PORT = process.env.PORT || 3000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
@@ -43,6 +43,21 @@ function sortBooks(books, sort, order) {
   });
 }
 
+// Shared checks for routes with :id. Sends the error response and returns null when the id is bad.
+async function findBookOrRespond(req, res) {
+  const id = parseId(req.params.id);
+  if (id === null) {
+    res.status(400).json({ error: 'Book id must be a positive integer.' });
+    return null;
+  }
+  const book = await store.getBookById(id);
+  if (!book) {
+    res.status(404).json({ error: `Book with id ${id} not found.` });
+    return null;
+  }
+  return book;
+}
+
 app.get('/api/books', async (req, res) => {
   const { value: options, error } = validateQuery(req.query);
   if (error) {
@@ -68,6 +83,12 @@ app.get('/api/books', async (req, res) => {
     limit: options.limit,
     books: sorted.slice(start, start + options.limit),
   });
+});
+
+app.get('/api/books/:id', async (req, res) => {
+  const book = await findBookOrRespond(req, res);
+  if (!book) return;
+  res.json(book);
 });
 
 // 404 fallback for every path that matched no route.
