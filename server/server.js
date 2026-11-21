@@ -142,6 +142,20 @@ app.patch('/api/books/:id', async (req, res) => {
   res.json(await store.replaceBook(existing.id, value));
 });
 
+app.delete('/api/books/:id', async (req, res) => {
+  const id = parseId(req.params.id);
+  if (id === null) {
+    return res.status(400).json({ error: 'Book id must be a positive integer.' });
+  }
+
+  const deleted = await store.deleteBook(id);
+  if (!deleted) {
+    return res.status(404).json({ error: `Book with id ${id} not found.` });
+  }
+
+  res.status(204).end();
+});
+
 // 404 fallback for every path that matched no route.
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
