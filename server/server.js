@@ -179,9 +179,29 @@ app.get('/api/stats', async (req, res) => {
   });
 });
 
+// Deliberately throws inside an async handler to prove the error middleware works.
+app.get('/api/crash', async () => {
+  throw new Error('Deliberate crash for testing the error handler');
+});
+
 // 404 fallback for every path that matched no route.
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
+});
+
+// Error-handling middleware: four parameters, registered after all routes.
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ error: 'Malformed JSON in request body.' });
+  }
+
+  console.error(err);
+
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  res.status(500).json({ error: 'Something went wrong' });
 });
 
 app.listen(PORT, () => {
