@@ -156,6 +156,29 @@ app.delete('/api/books/:id', async (req, res) => {
   res.status(204).end();
 });
 
+app.get('/api/stats', async (req, res) => {
+  const books = await store.getAllBooks();
+  const readCount = books.filter((book) => book.read).length;
+  const ratings = books.filter((book) => book.rating !== null).map((book) => book.rating);
+  const averageRating =
+    ratings.length === 0
+      ? null
+      : Math.round((ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length) * 10) / 10;
+
+  const byGenre = books.reduce(
+    (counts, book) => ({ ...counts, [book.genre]: (counts[book.genre] ?? 0) + 1 }),
+    {}
+  );
+
+  res.json({
+    total: books.length,
+    read: readCount,
+    unread: books.length - readCount,
+    averageRating,
+    byGenre,
+  });
+});
+
 // 404 fallback for every path that matched no route.
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
