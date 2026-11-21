@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import * as store from './booksStore.js';
-import { parseId, validateBook, validateQuery } from './validate.js';
+import { parseId, pickBookFields, isJsonObject, validateBook, validateQuery } from './validate.js';
 
 const PORT = process.env.PORT || 3000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
@@ -110,6 +110,27 @@ app.put('/api/books/:id', async (req, res) => {
   if (!existing) return;
 
   const { value, error } = validateBook(req.body);
+  if (error) {
+    return res.status(400).json({ error });
+  }
+
+  if (await store.isDuplicate(value.title, value.author, existing.id)) {
+    return res.status(409).json({ error: 'A book with this title and author already exists.' });
+  }
+
+  res.json(await store.replaceBook(existing.id, value));
+});
+
+app.patch('/api/books/:id', async (req, res) => {
+  const existing = await findBookOrRespond(req, res);
+  if (!existing) return;
+
+  if (!isJsonObject(req.body)) {
+    return res.status(400).json({ error: 'Request body must be a JSON object.' });
+  }
+
+  const merged = { ...existing, ...pickBookFields(req.body) };
+  const { value, error } = validateBook(merged);
   if (error) {
     return res.status(400).json({ error });
   }
