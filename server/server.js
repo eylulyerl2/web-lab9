@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import * as store from './booksStore.js';
-import { parseId, validateQuery } from './validate.js';
+import { parseId, validateBook, validateQuery } from './validate.js';
 
 const PORT = process.env.PORT || 3000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
@@ -89,6 +89,20 @@ app.get('/api/books/:id', async (req, res) => {
   const book = await findBookOrRespond(req, res);
   if (!book) return;
   res.json(book);
+});
+
+app.post('/api/books', async (req, res) => {
+  const { value, error } = validateBook(req.body);
+  if (error) {
+    return res.status(400).json({ error });
+  }
+
+  if (await store.isDuplicate(value.title, value.author)) {
+    return res.status(409).json({ error: 'A book with this title and author already exists.' });
+  }
+
+  const book = await store.createBook(value);
+  res.status(201).location(`/api/books/${book.id}`).json(book);
 });
 
 // 404 fallback for every path that matched no route.
