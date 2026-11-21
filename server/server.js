@@ -105,6 +105,22 @@ app.post('/api/books', async (req, res) => {
   res.status(201).location(`/api/books/${book.id}`).json(book);
 });
 
+app.put('/api/books/:id', async (req, res) => {
+  const existing = await findBookOrRespond(req, res);
+  if (!existing) return;
+
+  const { value, error } = validateBook(req.body);
+  if (error) {
+    return res.status(400).json({ error });
+  }
+
+  if (await store.isDuplicate(value.title, value.author, existing.id)) {
+    return res.status(409).json({ error: 'A book with this title and author already exists.' });
+  }
+
+  res.json(await store.replaceBook(existing.id, value));
+});
+
 // 404 fallback for every path that matched no route.
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
