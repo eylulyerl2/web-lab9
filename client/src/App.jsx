@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { createBook, getBooks, getStats, replaceBook } from './api/books.js';
+import { createBook, deleteBook, getBooks, getStats, replaceBook, updateBook } from './api/books.js';
 import Filters from './components/Filters.jsx';
 import BookList from './components/BookList.jsx';
 import BookForm from './components/BookForm.jsx';
@@ -13,6 +13,8 @@ function App() {
   const [stats, setStats] = useState({ data: null, error: null });
   const [refreshKey, setRefreshKey] = useState(0);
   const [editingBook, setEditingBook] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+  const [actionError, setActionError] = useState(null);
 
   // Identifies the request that matches the current filters and refresh count.
   const requestKey = `${JSON.stringify(filters)}#${refreshKey}`;
@@ -62,6 +64,39 @@ function App() {
     refresh();
   }
 
+  async function runAction(book, action) {
+    setBusyId(book.id);
+    setActionError(null);
+    try {
+      await action();
+      refresh();
+    } catch (error) {
+      setActionError(`"${book.title}": ${error.message}`);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function handleToggleRead(book) {
+    const changes = book.read ? { read: false, rating: null } : { read: true };
+    runAction(book, () => updateBook(book.id, changes));
+  }
+
+  function handleRate(book, value) {
+    const rating = value === '' ? null : Number(value);
+    runAction(book, () => updateBook(book.id, { rating }));
+  }
+
+  function handleDelete(book) {
+    if (!window.confirm(`Delete "${book.title}"?`)) return;
+    runAction(book, async () => {
+      await deleteBook(book.id);
+      if (editingBook?.id === book.id) {
+        setEditingBook(null);
+      }
+    });
+  }
+
   return (
     <div className="app">
       <h1>Reading List</h1>
@@ -70,11 +105,16 @@ function App() {
       <main className="layout">
         <section className="books">
           <Filters filters={filters} onChange={setFilters} />
+          {actionError && <p className="error">{actionError}</p>}
           <BookList
             loading={loading}
             error={list.error}
             books={list.books}
+            busyId={busyId}
+            onToggleRead={handleToggleRead}
+            onRate={handleRate}
             onEdit={setEditingBook}
+            onDelete={handleDelete}
           />
         </section>
 
