@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react';
 import { getBooks } from './api/books.js';
+import Filters from './components/Filters.jsx';
 import BookList from './components/BookList.jsx';
 
 const INITIAL_FILTERS = { q: '', genre: '', read: '', sort: '', order: 'asc' };
 
 function App() {
-  const [filters] = useState(INITIAL_FILTERS);
+  const [filters, setFilters] = useState(INITIAL_FILTERS);
   const [list, setList] = useState({ key: null, error: null, books: [] });
 
   // Identifies the request that matches the current filters.
   const requestKey = JSON.stringify(filters);
   const loading = list.key !== requestKey;
 
+  // Load the list from the server whenever a control changes.
   useEffect(() => {
     const controller = new AbortController();
 
@@ -29,6 +31,7 @@ function App() {
   return (
     <div className="app">
       <h1>Reading List</h1>
+      <Filters filters={filters} onChange={setFilters} />
       <BookList loading={loading} error={list.error} books={list.books} />
     </div>
   );
