@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { createBook, getBooks, getStats } from './api/books.js';
+import { createBook, getBooks, getStats, replaceBook } from './api/books.js';
 import Filters from './components/Filters.jsx';
 import BookList from './components/BookList.jsx';
 import BookForm from './components/BookForm.jsx';
@@ -12,6 +12,7 @@ function App() {
   const [list, setList] = useState({ key: null, error: null, books: [] });
   const [stats, setStats] = useState({ data: null, error: null });
   const [refreshKey, setRefreshKey] = useState(0);
+  const [editingBook, setEditingBook] = useState(null);
 
   // Identifies the request that matches the current filters and refresh count.
   const requestKey = `${JSON.stringify(filters)}#${refreshKey}`;
@@ -55,6 +56,12 @@ function App() {
     refresh();
   }
 
+  async function handleReplace(book) {
+    await replaceBook(editingBook.id, book);
+    setEditingBook(null);
+    refresh();
+  }
+
   return (
     <div className="app">
       <h1>Reading List</h1>
@@ -63,11 +70,25 @@ function App() {
       <main className="layout">
         <section className="books">
           <Filters filters={filters} onChange={setFilters} />
-          <BookList loading={loading} error={list.error} books={list.books} />
+          <BookList
+            loading={loading}
+            error={list.error}
+            books={list.books}
+            onEdit={setEditingBook}
+          />
         </section>
 
         <aside>
-          <BookForm key="new" onSubmit={handleCreate} />
+          {editingBook ? (
+            <BookForm
+              key={editingBook.id}
+              book={editingBook}
+              onSubmit={handleReplace}
+              onCancel={() => setEditingBook(null)}
+            />
+          ) : (
+            <BookForm key="new" onSubmit={handleCreate} />
+          )}
         </aside>
       </main>
     </div>

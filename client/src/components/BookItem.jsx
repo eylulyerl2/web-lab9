@@ -1,4 +1,4 @@
-function BookItem({ book }) {
+function BookItem({ book, onEdit }) {
   return (
     <li className="book">
       <div className="book-info">
@@ -10,6 +10,9 @@ function BookItem({ book }) {
       <div className="book-actions">
         <span>{book.read ? 'Read' : 'Unread'}</span>
         <span>{book.rating ? '★'.repeat(book.rating) : 'No rating'}</span>
+        <button type="button" onClick={() => onEdit(book)}>
+          Edit
+        </button>
       </div>
     </li>
   );

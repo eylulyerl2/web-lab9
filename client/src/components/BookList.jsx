@@ -1,6 +1,6 @@
 import BookItem from './BookItem.jsx';
 
-function BookList({ loading, error, books }) {
+function BookList({ loading, error, books, onEdit }) {
   if (loading) {
     return <p>Loading books...</p>;
   }
@@ -16,7 +16,7 @@ function BookList({ loading, error, books }) {
   return (
     <ul className="book-list">
       {books.map((book) => (
-        <BookItem key={book.id} book={book} />
+        <BookItem key={book.id} book={book} onEdit={onEdit} />
       ))}
     </ul>
   );
