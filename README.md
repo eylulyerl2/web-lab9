@@ -330,3 +330,63 @@ Keep-Alive: timeout=5
 
 {"error":"Book with id 7 not found."}
 ```
+
+## CORS Preflight Evidence
+
+Observed in Chrome DevTools → Network (filter: All) while adding a book from the React page at `http://localhost:5173`. Before the real `POST`, the browser sent an extra `OPTIONS` request to the same URL, shown with the type **preflight**:
+
+| | Value |
+|---|---|
+| Request URL | `http://localhost:3000/api/books` |
+| Request Method | `OPTIONS` |
+| Status Code | `204 No Content` |
+
+**Request headers (the browser asks):**
+
+```
+Origin: http://localhost:5173
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: content-type
+Sec-Fetch-Mode: cors
+```
+
+**Response headers (the server answers, set by the `cors` package):**
+
+```
+Access-Control-Allow-Origin: http://localhost:5173
+Access-Control-Allow-Methods: GET,HEAD,PUT,PATCH,POST,DELETE
+Access-Control-Allow-Headers: content-type
+Vary: Origin, Access-Control-Request-Headers
+```
+
+The preflight happens because the page and the API have different origins (port 5173 vs. 3000) and the request sends a JSON body with `Content-Type: application/json`, which is not a "simple" request. The answer allowed the origin, the method and the header, so the browser then sent the real `POST`, which returned `201`. Plain `GET` requests (list and stats) did not need a preflight.
+
+## Reasoning Questions
+
+### 1. Parameters
+
+The `id` identifies one specific resource, so it is part of the path: `/api/books/7` *is* book 7, and `GET`, `PUT`, `PATCH` and `DELETE` all act on that same address. `genre` and `sort` do not identify anything; they are optional ways to view the collection `/api/books`, they can be combined and left out, so they belong in the query string. If the id were a query parameter (`/api/books?id=7`), the same path would mean both "the list" and "one book", a missing id would look like an empty list instead of a clear `404`, and `PUT /api/books?id=7` or `DELETE /api/books?id=7` would look like operations on the whole collection.
+
+### 2. Body parsing
+
+**Experiment:** I moved `app.use(express.json())` below all the routes. Adding a book from the form and with curl both returned `400 Bad Request` with `{"error":"Request body must be a JSON object."}`, even though the JSON I sent was correct. The routes now ran *before* the body was parsed, so `req.body` was `undefined` and my validation rejected it. Middleware runs in the order it is registered, so the parser must come before the routes that read the body.
+
+### 3. One response
+
+**Experiment:** In `POST /api/books` I removed the `return` in front of the early `409` response. I added "Dune" twice: the first request returned `201`, the second returned `409 Conflict`, so the client was told the book was not added. But `GET /api/books?q=dune` then returned **two** Dunes (`id` 7 and 8), and the server printed `Error [ERR_HTTP_HEADERS_SENT]: Cannot set headers after they are sent to the client` at the line with `.location(...)`. Without `return`, the handler kept running after sending the `409`: it created the duplicate and then tried to send a second response. The client got a wrong answer and the data was corrupted.
+
+### 4. PUT and PATCH
+
+`PATCH` is the better choice for the read checkbox and the rating select: the client only sends what changed, for example `{ "rating": 3 }`, without having to send (or even know) the title, author, year and genre, and it cannot accidentally overwrite another field. `PUT` fits the edit form: the user sees and submits every field, and the whole book is replaced with exactly what is in the form. My curl evidence shows the difference: after the `PUT`, the `PATCH` with only `rating` kept every other value.
+
+### 5. CORS
+
+**Experiment:** I started the server with `$env:CLIENT_ORIGIN="http://localhost:9999"`. The page showed "Could not load books: Failed to fetch", the Network tab showed **CORS error**, and the console said: *"Access to fetch at 'http://localhost:3000/api/books?order=asc' from origin 'http://localhost:5173' has been blocked by CORS policy: The 'Access-Control-Allow-Origin' header has a value 'http://localhost:9999' that is not equal to the supplied origin"*, followed by `net::ERR_FAILED 200 (OK)`. The server **did** log every request (`GET /api/books?order=asc`, `GET /api/stats`) and answered them with `200`; it was the browser that refused to give the response to the page. `curl` still worked and showed `Access-Control-Allow-Origin: http://localhost:9999`, because CORS is enforced only by browsers, to protect their users. curl is not a browser and ignores that header.
+
+### 6. Validation
+
+Client-side checks only help an honest user of my page. Anyone can call the API directly with curl, DevTools or another program and send any body they like, so the server can never trust that the data passed through my form. Some rules can only be checked on the server anyway, such as a duplicate title and author, and the form's `required` and `maxLength` do not check the year range or that a rating needs `read: true`. The server is the single place that protects the stored data, so it must validate everything.
+
+### 7. State
+
+**Experiment:** With the app open, I added a book and marked another book as read; the statistics showed `Total: 7`. After restarting the server and reloading the page, the new book and the change were gone and the statistics were back to `Total: 6, Read: 4, Unread: 2, Average rating: 4`, exactly the seed data. The books only live in a variable inside `booksStore.js`, in the memory of the running Node process, so they disappear when the process stops. To keep them, the data must be stored outside the process, for example in a database or a file.
