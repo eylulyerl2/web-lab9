@@ -390,3 +390,43 @@ Client-side checks only help an honest user of my page. Anyone can call the API 
 ### 7. State
 
 **Experiment:** With the app open, I added a book and marked another book as read; the statistics showed `Total: 7`. After restarting the server and reloading the page, the new book and the change were gone and the statistics were back to `Total: 6, Read: 4, Unread: 2, Average rating: 4`, exactly the seed data. The books only live in a variable inside `booksStore.js`, in the memory of the running Node process, so they disappear when the process stops. To keep them, the data must be stored outside the process, for example in a database or a file.
+
+## Self-Study Notes
+
+### Building a query string safely with `URLSearchParams`
+In `client/src/api/books.js`, `getBooks()` creates a `URLSearchParams`, adds only the filters that are not empty with `params.set(name, value)` and uses `params.toString()`. It encodes special characters for me: typing `a&b` in the search box sent `q=a%26b` (checked in the Network tab), so the `&` could not break the URL into two parameters. Ids in paths are encoded with `encodeURIComponent()`.
+
+### Comparing strings with `localeCompare`
+Sorting with `<` or `-` does not work for text. On the server, `a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })` returns a negative, zero or positive number, as `Array.prototype.sort` expects, and `sensitivity: 'base'` ignores upper/lower case. I always sort a copy (`[...books].sort(...)`), because `sort` changes the array it is called on, and books with `rating: null` are handled first so they always end up last.
+
+### `import.meta.env` and the `VITE_` prefix
+Vite puts environment variables from `client/.env` into `import.meta.env`, but only the ones whose name starts with `VITE_`. Everything in the client ends up in the JavaScript that the browser downloads, so the prefix prevents other variables (for example secrets on the developer's machine) from being exposed by accident. The values are read when the dev server starts or when building, so after changing `.env` the dev server has to be restarted. `.env` stays out of Git; `.env.example` documents the variable.
+
+### Sending an empty `204` response in Express 5
+`DELETE` uses `res.status(204).end()`. `204 No Content` must not have a body, so I don't use `res.json()` or `res.send()` with data; the curl output shows no `Content-Type` and no body. On the client, the `request()` helper checks `response.status === 204` and returns `null` before trying `response.json()`, which would fail on an empty body.
+
+### Cancelling a `fetch` and recognising `AbortError`
+Each effect that loads data creates an `AbortController`, passes `controller.signal` to `fetch`, and calls `controller.abort()` in its cleanup. An aborted `fetch` rejects with an error whose `name` is `"AbortError"`; I return early for it instead of showing it as a failure. In the Network tab the first requests after a page load appear as **(canceled)**: React's StrictMode runs effects twice in development, and the first run is cleaned up. The same cleanup makes sure that when filters change quickly, an old, slow response can never overwrite a newer list.
+
+### Errors in async handlers in Express 5
+Express 5 catches errors thrown (or rejected promises) inside `async` route handlers and passes them to the error-handling middleware, so no `try/catch` is needed around every handler. `GET /api/crash` proves it. Malformed JSON is reported by `express.json()` with `err.type === 'entity.parse.failed'`, which my error middleware turns into a JSON `400` instead of Express's HTML error page.
+
+## Challenges
+
+**1. `npm install` failed with `ERESOLVE` in the client.**
+Right after creating the Vite project, `npm install` stopped with `ERESOLVE unable to resolve dependency tree` and `Found: vite@undefined`. The message suggested `--force` or `--legacy-peer-deps`, but I did not use them because they only hide the problem. Running `npm install` again worked (24 packages, 0 vulnerabilities), so it was a temporary download problem.
+
+**2. My first push failed.**
+`git push -u origin main` answered `src refspec main does not match any`, because the first commit had been created on a branch called `master`. `git branch -M main` renamed it, and the push worked.
+
+**3. The server restarted in the middle of my tests.**
+While collecting curl evidence, `POST` created Dune with `201`, but the next `GET /api/stats` still said `total: 6`. The server log showed `Restarting 'server.js'` between the two requests: `node --watch` had restarted it because a server file was saved, and the in-memory data went back to the seed. For the evidence I ran the server with `npm start` (no watch mode). This also showed in practice that the data only lives in memory (Reasoning Question 7).
+
+**4. Sending JSON from PowerShell.**
+Writing JSON directly inside a curl command in PowerShell breaks the quotes, so I piped the body into curl: `'{"title":"Dune",...}' | curl.exe ... --data-binary "@-"`. I also had to use `curl.exe` instead of `curl` (an alias for a different command in PowerShell) and put URLs with `&` in quotes.
+
+**5. Working with two projects in one repository.**
+VS Code opens new terminals in the repository root, so `npm run dev` failed with `ENOENT: Could not read package.json`. I learned to `cd server` or `cd client` first and to keep three terminals: one for the server, one for the client and one for Git. I also once created `README.md` inside `client/src` by mistake and moved it back to the root.
+
+**6. The checkbox did not change immediately.**
+When I clicked "Read", the checkbox only changed after a short moment. This is on purpose: the screen is only updated after the server confirms the `PATCH`. When I stopped the server and clicked it, the page showed `"Sapiens": Failed to fetch` and the checkbox stayed unchecked.
