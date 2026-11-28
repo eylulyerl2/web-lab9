@@ -1,10 +1,12 @@
 import express from 'express';
 import cors from 'cors';
+import mongoose from 'mongoose';
 import * as store from './booksStore.js';
 import { parseId, pickBookFields, isJsonObject, validateBook, validateQuery } from './validate.js';
 
 const PORT = process.env.PORT || 3000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/readinglist';
 
 const app = express();
 
@@ -204,7 +206,22 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-  console.log(`Allowed client origin: ${CLIENT_ORIGIN}`);
-});
+// Connect to MongoDB first; only start listening when the database is reachable.
+async function start() {
+  try {
+    await mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
+    console.log(`Connected to MongoDB: ${mongoose.connection.host}:${mongoose.connection.port}/${mongoose.connection.name}`);
+  } catch (err) {
+    console.error(`Could not connect to MongoDB at ${MONGODB_URI}`);
+    console.error(`Reason: ${err.message}`);
+    console.error('Is the database running? Start it with: docker compose up -d');
+    process.exit(1);
+  }
+
+  app.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+    console.log(`Allowed client origin: ${CLIENT_ORIGIN}`);
+  });
+}
+
+start();
